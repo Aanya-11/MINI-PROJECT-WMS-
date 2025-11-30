@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>ESP32 Weather Monitoring Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#eff6ff',
+              100: '#dbeafe',
+              500: '#3b82f6',
+              600: '#2563eb',
+            },
+            temp: '#f97316',
+            humidity: '#0ea5e9',
+            air: '#22c55e',
+            pressure: '#8b5cf6',
+            rain: '#ec4899',
+          },
+          keyframes: {
+            float: {
+              '0%, 100%': { transform: 'translateY(0px)' },
+              '50%': { transform: 'translateY(-8px)' },
+            },
+            slowPulse: {
+              '0%, 100%': { opacity: '0.4' },
+              '50%': { opacity: '0.9' },
+            },
+            gradientMove: {
+              '0%': { backgroundPosition: '0% 50%' },
+              '50%': { backgroundPosition: '100% 50%' },
+              '100%': { backgroundPosition: '0% 50%' },
+            },
+          },
+          animation: {
+            'float-slow': 'float 6s ease-in-out infinite',
+            'pulse-soft': 'slowPulse 8s ease-in-out infinite',
+            'gradient-move': 'gradientMove 18s ease infinite',
+          },
+        },
+      },
+    };
+  </script>
+
+  <!-- Chart.js CDN (for future graphs / compatibility) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-sky-100 via-sky-200 to-slate-200 text-slate-800 flex flex-col relative overflow-x-hidden">
+
+  <!-- big soft "cloud/sun" in background -->
+  <div class="pointer-events-none absolute inset-0 opacity-60">
+    <div class="w-72 h-72 bg-white/70 rounded-full blur-3xl animate-pulse-soft absolute -top-24 -left-16"></div>
+    <div class="w-64 h-64 bg-sky-50 rounded-full blur-3xl animate-pulse-soft absolute bottom-[-4rem] right-[-2rem]"></div>
+  </div>
+
+  <div class="max-w-6xl w-full mx-auto px-4 py-6 flex-1 flex flex-col gap-6 relative">
+    <!-- Header -->
+    <header
+      class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white/95 backdrop-blur-sm rounded-2xl shadow-md shadow-slate-300/50 border border-slate-100 px-5 py-4"
+    >
+      <div class="flex items-start gap-3">
+        <div
+          class="w-14 h-14 rounded-3xl bg-gradient-to-tr from-primary-500 via-temp to-humidity flex items-center justify-center shadow-lg shadow-primary-500/30 animate-float-slow"
+        >
+          <span class="text-3xl">🌤️</span>
+        </div>
+        <div>
+          <h1 class="text-xl md:text-2xl font-semibold tracking-tight">
+            ESP32 Weather Monitoring System
+          </h1>
+          <p class="text-xs md:text-sm text-slate-500">
+            DHT11 • MQ135 • BMP180 • Rain Sensor &nbsp;|&nbsp;
+            <span id="current-datetime" class="font-medium text-slate-700"></span>
+          </p>
+        </div>
+      </div>
+
+      <div class="flex flex-col items-start md:items-end gap-2">
+        <div
+          id="connection-pill"
+          class="inline-flex items-center gap-2 rounded-full px-3 py-1 border text-xs md:text-sm bg-amber-50 border-amber-200 text-amber-700"
+        >
+          <span class="relative flex h-2.5 w-2.5">
+            <span
+              class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-60"
+            ></span>
+            <span
+              class="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"
+            ></span>
+          </span>
+          <span id="connection-status">Connecting to ESP32…</span>
+        </div>
+        <p id="error-message" class="text-xs text-red-500 hidden">
+          Could not connect to ESP32.
+        </p>
+      </div>
+    </header>
+
+    <!-- Indicator Cards -->
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <!-- Temperature -->
+      <div
+        class="bg-white/95 backdrop-blur-sm rounded-2xl shadow-md shadow-slate-300/50 border border-slate-100 px-4 py-4 flex flex-col gap-2 transform transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
+      >
+        <div class="flex items-center justify-between">
+          <p class="text-xs font-medium text-slate-500 uppercase tracking-wide">
+            Temperature
+          </p>
+          <span class="text-xs px-2 py-1 rounded-full bg-temp/10 text-temp font-medium">
+            DHT11
+          </span>
+        </div>
+        <div class="flex items-baseline gap-1">
+          <span id="temp-value" class="text-3xl font-semibold text-slate-800">
+            25.5
+          </span>
+          <span class="text-sm text-slate-500">°C</span>
+        </div>
+        <p id="temp-status" class="text-xs text-slate-500">Comfortable</p>
+      </div>
+
+      <!-- Humidity -->
+      <div
+        class="bg-white/95 backdrop-blur-sm rounded-2xl shadow-md shadow-slate-300/50 border border-slate-100 px-4 py-4 flex flex-col gap-2 transform transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
+      >
+        <div class="flex items-center justify-between">
+          <p class="text-xs font-medium text-slate-500 uppercase tracking-wide">
+            Humidity
+          </p>
+          <span class="text-xs px-2 py-1 rounded-full bg-humidity/10 text-humidity font-medium">
+            DHT11
+          </span>
+        </div>
+        <div class="flex items-baseline gap-1">
+          <span id="humidity-value" class="text-3xl font-semibold text-slate-800">
+            60.2
+          </span>
+          <span class="text-sm text-slate-500">%</span>
+        </div>
+        <p id="humidity-status" class="text-xs text-slate-500">Normal</p>
+      </div>
+
+      <!-- Air Quality -->
+      <div
+        class="bg-white/95 backdrop-blur-sm rounded-2xl shadow-md shadow-slate-300/50 border border-slate-100 px-4 py-4 flex flex-col gap-2 transform transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
+      >
+        <div class="flex items-center justify-between">
+          <p class="text-xs font-medium text-slate-500 uppercase tracking-wide">
+            Air Quality
+          </p>
+          <span class="text-xs px-2 py-1 rounded-full bg-air/10 text-air font-medium">
+            MQ135
+          </span>
+        </div>
+        <div class="flex items-baseline gap-1">
+          <span id="air-value" class="text-3xl font-semibold text-slate-800">
+            450
+          </span>
+          <span class="text-sm text-slate-500">PPM</span>
+        </div>
+        <p id="air-status" class="text-xs text-slate-500">Good</p>
+      </div>
+
+      <!-- Pressure -->
+      <div
+        class="bg-white/95 backdrop-blur-sm rounded-2xl shadow-md shadow-slate-300/50 border border-slate-100 px-4 py-4 flex flex-col gap-2 transform transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
+      >
+        <div class="flex items-center justify-between">
+          <p class="text-xs font-medium text-slate-500 uppercase tracking-wide">
+            Pressure
+          </p>
+          <span class="text-xs px-2 py-1 rounded-full bg-pressure/10 text-pressure font-medium">
+            BMP180
+          </span>
+        </div>
+        <div class="flex items-baseline gap-1">
+          <span id="pressure-value" class="text-3xl font-semibold text-slate-800">
+            1012.3
+          </span>
+          <span class="text-sm text-slate-500">hPa</span>
+        </div>
+        <p id="pressure-status" class="text-xs text-slate-500">Stable</p>
+      </div>
+
+      <!-- Rain Status -->
+      <div
+        class="bg-white/95 backdrop-blur-sm rounded-2xl shadow-md shadow-slate-300/50 border border-slate-100 px-4 py-4 flex flex-col gap-2 transform transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
+      >
+        <div class="flex items-center justify-between">
+          <p class="text-xs font-medium text-slate-500 uppercase tracking-wide">
+            Rain Status
+          </p>
+          <span class="text-xs px-2 py-1 rounded-full bg-rain/10 text-rain font-medium">
+            Rain Sensor
+          </span>
+        </div>
+        <div class="flex items-baseline gap-1">
+          <span id="rain-value" class="text-xl font-semibold text-slate-800">
+            Dry
+          </span>
+        </div>
+        <p id="rain-desc" class="text-xs text-slate-500">No rain detected</p>
+      </div>
+    </section>
+
+    <!-- BIG Dynamic Weather Status Card -->
+    <section class="grid grid-cols-1 pb-4">
+      <div
+        id="weather-card"
+        class="relative min-h-[260px] md:min-h-[320px] bg-gradient-to-br from-sky-100 via-sky-50 to-white bg-[length:200%_200%] rounded-3xl shadow-xl shadow-slate-300/90 border border-sky-200 overflow-hidden px-6 py-6 md:px-10 md:py-8 flex flex-col md:flex-row items-center gap-6 transition-all duration-500 animate-gradient-move"
+      >
+        <!-- Moving glow -->
+        <div class="pointer-events-none absolute inset-0 opacity-40">
+          <div class="w-48 h-48 bg-white rounded-full blur-3xl animate-pulse-soft absolute -top-12 -left-8"></div>
+          <div class="w-44 h-44 bg-white/70 rounded-full blur-3xl animate-pulse-soft absolute bottom-0 right-0"></div>
+        </div>
+
+        <!-- Big Icon -->
+        <div class="relative flex items-center justify-center w-32 h-32 md:w-40 md:h-40 rounded-[2rem] bg-white/80 shadow-lg shadow-slate-300/80 animate-float-slow">
+          <span id="weather-icon" class="text-5xl md:text-7xl">☀️</span>
+        </div>
+
+        <!-- Text section -->
+        <div class="relative flex-1 flex flex-col gap-2 max-w-xl">
+          <p class="text-xs md:text-sm font-semibold uppercase tracking-wide text-slate-500">
+            Live Weather Status
+          </p>
+          <h2 id="weather-title" class="text-2xl md:text-3xl font-semibold text-slate-900">
+            Pleasant Day
+          </h2>
+          <p id="weather-message" class="text-sm md:text-base text-slate-600">
+            Conditions are comfortable with balanced temperature, humidity, and good air quality.
+          </p>
+          <div class="mt-3 flex flex-wrap gap-2 text-[11px] md:text-xs text-slate-500">
+            <span class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white/70 border border-slate-200">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              Uses all sensor readings
+            </span>
+            <span class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white/70 border border-slate-200">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+              Auto-updates every few seconds
+            </span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    // ================== Live Date/Time ==================
+    function updateDateTime() {
+      const el = document.getElementById('current-datetime');
+      if (!el) return;
+      const now = new Date();
+      el.textContent = now.toLocaleString(undefined, {
+        weekday: 'short',
+        year: 'numeric',
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+    }
+    setInterval(updateDateTime, 1000);
+    updateDateTime();
+
+    // ================== Mock Initial Data ==================
+    let currentData = {
+      tempC: 25.5,
+      humidity: 60.2,
+      pressure_hPa: 1012.3,
+      air_quality_ppm: 450,
+      rain_status: 'Dry',
+      history: []
+    };
+
+    // ================== Classification Helpers ==================
+    function tempStatusText(t) {
+      if (t < 18) return 'Cool';
+      if (t <= 30) return 'Comfortable';
+      return 'Hot';
+    }
+
+    function humidityStatusText(h) {
+      if (h < 30) return 'Dry';
+      if (h <= 60) return 'Normal';
+      return 'Humid';
+    }
+
+    function airQualityStatusText(ppm) {
+      if (ppm <= 500) return 'Good';
+      if (ppm <= 800) return 'Moderate';
+      return 'Poor';
+    }
+
+    function pressureStatusText(p) {
+      if (p < 1008) return 'Low';
+      if (p <= 1020) return 'Stable';
+      return 'High';
+    }
+
+    function describeRain(status) {
+      const s = (status || '').toLowerCase();
+      if (s.includes('heavy')) return 'Heavy rainfall detected';
+      if (s.includes('light')) return 'Light rainfall';
+      if (s.includes('moderate')) return 'Moderate rainfall';
+      if (s.includes('wet')) return 'Surface is wet';
+      return 'No rain detected';
+    }
+
+    // ================== Overall Weather Status Logic ==================
+    function computeWeatherStatusKey(data) {
+      const t = data.tempC ?? 0;
+      const h = data.humidity ?? 0;
+      const aq = data.air_quality_ppm ?? 500;
+      const rain = (data.rain_status || '').toLowerCase();
+
+      if (rain.includes('heavy')) {
+        return 'heavy_rain';
+      }
+      if (rain.includes('light') || rain.includes('moderate') || rain.includes('wet')) {
+        return 'rainy';
+      }
+      if (aq > 800) {
+        return 'poor_air';
+      }
+      if (t > 30 && h < 40) {
+        return 'hot_dry';
+      }
+      return 'pleasant';
+    }
+
+    const weatherStates = {
+      pleasant: {
+        icon: '☀️',
+        title: 'Pleasant Day',
+        message:
+          'Conditions are comfortable with balanced temperature, humidity, and good air quality.',
+        bgClasses: 'from-sky-100 via-sky-50 to-white border-sky-200'
+      },
+      hot_dry: {
+        icon: '🔥',
+        title: 'Hot & Dry Alert',
+        message:
+          'High temperature and low humidity detected. Stay hydrated and limit exposure to direct sunlight.',
+        bgClasses: 'from-orange-100 via-orange-50 to-white border-orange-200'
+      },
+      rainy: {
+        icon: '🌧️',
+        title: 'Rainy Conditions',
+        message:
+          'Rain sensor detects wet conditions. Roads and outdoor surfaces may be slippery.',
+        bgClasses: 'from-blue-100 via-sky-100 to-slate-50 border-blue-200'
+      },
+      heavy_rain: {
+        icon: '⛈️',
+        title: 'Heavy Rain Warning',
+        message:
+          'Heavy rainfall detected. Outdoor visibility and safety may be affected. Use caution if travelling.',
+        bgClasses: 'from-indigo-100 via-blue-200 to-slate-100 border-indigo-300'
+      },
+      poor_air: {
+        icon: '🌫️',
+        title: 'Air Quality Alert',
+        message:
+          'Elevated pollution levels from MQ135. Consider using masks or reducing time outdoors.',
+        bgClasses: 'from-amber-100 via-amber-50 to-white border-amber-200'
+      }
+    };
+
+    function updateWeatherStatusCard(data) {
+      const key = computeWeatherStatusKey(data);
+      const state = weatherStates[key] || weatherStates.pleasant;
+
+      const card = document.getElementById('weather-card');
+      const iconEl = document.getElementById('weather-icon');
+      const titleEl = document.getElementById('weather-title');
+      const msgEl = document.getElementById('weather-message');
+
+      const baseClasses =
+        'relative min-h-[260px] md:min-h-[320px] bg-gradient-to-br bg-[length:200%_200%] rounded-3xl shadow-xl shadow-slate-300/90 border overflow-hidden px-6 py-6 md:px-10 md:py-8 flex flex-col md:flex-row items-center gap-6 transition-all duration-500 animate-gradient-move';
+
+      card.className = baseClasses + ' ' + state.bgClasses;
+      iconEl.textContent = state.icon;
+      titleEl.textContent = state.title;
+      msgEl.textContent = state.message;
+    }
+
+    // ================== Indicator Card Updates ==================
+    function updateIndicatorCards(data) {
+      document.getElementById('temp-value').textContent =
+        typeof data.tempC === 'number' ? data.tempC.toFixed(1) : '--';
+      document.getElementById('temp-status').textContent =
+        typeof data.tempC === 'number' ? tempStatusText(data.tempC) : 'Unknown';
+
+      document.getElementById('humidity-value').textContent =
+        typeof data.humidity === 'number' ? data.humidity.toFixed(1) : '--';
+      document.getElementById('humidity-status').textContent =
+        typeof data.humidity === 'number' ? humidityStatusText(data.humidity) : 'Unknown';
+
+      document.getElementById('air-value').textContent =
+        typeof data.air_quality_ppm === 'number' ? data.air_quality_ppm.toFixed(0) : '--';
+      document.getElementById('air-status').textContent =
+        typeof data.air_quality_ppm === 'number' ? airQualityStatusText(data.air_quality_ppm) : 'Unknown';
+
+      document.getElementById('pressure-value').textContent =
+        typeof data.pressure_hPa === 'number' ? data.pressure_hPa.toFixed(1) : '--';
+      document.getElementById('pressure-status').textContent =
+        typeof data.pressure_hPa === 'number' ? pressureStatusText(data.pressure_hPa) : 'Unknown';
+
+      document.getElementById('rain-value').textContent = data.rain_status || 'Unknown';
+      document.getElementById('rain-desc').textContent = describeRain(data.rain_status);
+    }
+
+    // ================== ESP32 Data Fetch ==================
+    const ESP32_ENDPOINT = 'http://192.168.4.1/data';
+
+    async function fetchRealTimeData() {
+      try {
+        const res = await fetch(ESP32_ENDPOINT, {
+          cache: 'no-cache'
+        });
+
+        if (!res.ok) {
+          throw new Error('HTTP ' + res.status);
+        }
+
+        const json = await res.json();
+
+        currentData = {
+          tempC: json.tempC ?? currentData.tempC,
+          humidity: json.humidity ?? currentData.humidity,
+          pressure_hPa: json.pressure_hPa ?? currentData.pressure_hPa,
+          air_quality_ppm: json.air_quality_ppm ?? currentData.air_quality_ppm,
+          rain_status: json.rain_status ?? currentData.rain_status,
+          history: Array.isArray(json.history) ? json.history : currentData.history
+        };
+
+        document.getElementById('error-message').classList.add('hidden');
+        document.getElementById('connection-status').textContent = 'ESP32 Connected';
+        const pill = document.getElementById('connection-pill');
+        pill.classList.remove(
+          'bg-amber-50', 'border-amber-200', 'text-amber-700',
+          'bg-red-50', 'border-red-200', 'text-red-700'
+        );
+        pill.classList.add('bg-emerald-50', 'border-emerald-200', 'text-emerald-700');
+
+        updateIndicatorCards(currentData);
+        updateWeatherStatusCard(currentData);
+
+      } catch (err) {
+        console.error('ESP32 fetch error:', err);
+        document.getElementById('error-message').classList.remove('hidden');
+        document.getElementById('error-message').textContent = 'Could not connect to ESP32.';
+        document.getElementById('connection-status').textContent = 'ESP32 Offline';
+
+        const pill = document.getElementById('connection-pill');
+        pill.classList.remove(
+          'bg-emerald-50', 'border-emerald-200', 'text-emerald-700',
+          'bg-amber-50', 'border-amber-200', 'text-amber-700'
+        );
+        pill.classList.add('bg-red-50', 'border-red-200', 'text-red-700');
+      }
+    }
+
+    // ================== Init ==================
+    window.addEventListener('load', () => {
+      updateIndicatorCards(currentData);
+      updateWeatherStatusCard(currentData);
+
+      fetchRealTimeData();
+      setInterval(fetchRealTimeData, 5000);
+    });
+  </script>
+</body>
+</html>
