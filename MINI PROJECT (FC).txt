@@ -1,0 +1,132 @@
+/*--------------------------------------------------------------
+  ESP32 Weather Station - fixed version
+  - Robust DHT_Unified usage
+  - BMP085 read (hPa)
+  - Proper ADC setup for ESP32
+  - Better HTTP request parsing
+  - NaN checks and safe defaults
+--------------------------------------------------------------*/
+
+#include <WiFi.h>
+#include <Adafruit_BMP085.h>   // or Adafruit_BMP085_Unified
+#include <Adafruit_Sensor.h>
+#include <DHT.h>
+#include <DHT_U.h>
+
+/* Sensor pins */
+#define Rain_SensorPin      15      // Digital rain sensor input
+#define Air_SensorPin       34      // ADC pin (ESP32)
+#define Temp_Hum_SensorPin  4       // DHT data pin (GPIO 4)
+
+/* Objects */
+DHT_Unified dht(Temp_Hum_SensorPin, DHT11);
+Adafruit_BMP085 bmp;
+WiFiServer server(80);
+
+/* WiFi credentials - change to yours */
+char ssid[] = "abcd";
+char pass[] = "rakhi1612";
+
+/* Globals */
+float temperature = 0.0, humidity = 0.0, pressure = 0.0;
+int AQI = 0, rainfall = 0;
+
+unsigned long lastSensorUpdate = 0;
+unsigned long lastWiFiCheck = 0;
+
+void wifi_connect(unsigned long timeout_ms = 20000) {
+  WiFi.mode(WIFI_STA);
+  Serial.print("Connecting to WiFi");
+  WiFi.begin(ssid, pass);
+
+  unsigned long start = millis();
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print(".");
+    delay(500);
+    // optional timeout so code doesn't lock forever
+    if (millis() - start > timeout_ms) {
+      Serial.println("\nWiFi connect timed out.");
+      return;
+    }
+  }
+
+  Serial.println("\nConnected to WiFi!");
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
+}
+
+void wifi_reconnect() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("Reconnecting to WiFi...");
+    WiFi.disconnect();
+    wifi_connect();
+  }
+}
+
+void read_sensor_data() {
+  // --- DHT (temperature & humidity) ---
+  sensors_event_t event;
+  // Temperature
+  dht.temperature().getEvent(&event);
+  if (!isnan(event.temperature)) {
+    temperature = event.temperature;
+  } else {
+    Serial.println("Warning: DHT temperature read failed (NaN). Keeping previous value.");
+  }
+
+  // Humidity
+  dht.humidity().getEvent(&event);
+  if (!isnan(event.relative_humidity)) {
+    humidity = event.relative_humidity;
+  } else {
+    Serial.println("Warning: DHT humidity read failed (NaN). Keeping previous value.");
+  }
+
+  // --- BMP085 pressure (returns Pa) ---
+  if (bmp.begin()) {
+    float p_pa = bmp.readPressure();
+    pressure = p_pa / 100.0; // convert Pa to hPa / mbar
+  } else {
+    Serial.println("BMP085 read skipped - sensor not initialized.");
+  }
+
+  // --- MQ135-like air sensor (approx) ---
+  // Setup: ensure we set ADC attenuation and resolution in setup()
+  int mq135Raw = analogRead(Air_SensorPin);     // 0..4095 (12-bit)
+  float voltage = (float)mq135Raw * (3.3f / 4095.0f); // convert to volts
+  // NOTE: this conversion is rough; replace with calibration curve for real results
+  float mq135PPM = voltage * 100.0; // placeholder conversion, tune as needed
+  // Convert PPM (0..500) to AQI-ish (0..300) in a safe float way:
+  float aqi_f = (mq135PPM / 500.0f) * 300.0f;
+  if (aqi_f < 0) aqi_f = 0;
+  if (aqi_f > 300) aqi_f = 300;
+  AQI = (int)round(aqi_f);
+
+  // --- Rain sensor (digital) ---
+  // If your rain sensor outputs LOW when wet (typical), adjust accordingly
+  int rainState = digitalRead(Rain_SensorPin);
+  // Assume HIGH = no rain, LOW = rain (change logic if your sensor is opposite)
+  rainfall = (rainState == LOW) ? 1 : 0;
+
+  // Debug prints
+  Serial.printf("T: %.2f C, H: %.2f %% , P: %.2f hPa, AQI: %d, Rain: %d\n",
+                temperature, humidity, pressure, AQI, rainfall);
+}
+
+void send_json_data(WiFiClient &client) {
+  client.println("HTTP/1.1 200 OK");
+  client.println("Content-Type: application/json");
+  client.println("Connection: close");
+  client.println();
+
+  String json = "{\"temperature\":" + String(temperature, 2) +
+                ",\"humidity\":" + String(humidity, 2) +
+                ",\"pressure\":"+String(pressure, 2) +           // 2 decimal places
+                ",\"aqi\":" + String(AQI) +
+                ",\"rainfall\":" + String(rainfall) +
+                "}";
+
+  client.print(json);
+}
+
+                
