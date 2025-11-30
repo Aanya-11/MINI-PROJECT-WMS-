@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Weather Monitoring Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Google Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg: #ffffff;
+      --text-main: #222222;
+      --text-muted: #6b7280;
+      --card-bg: #ffffff;
+      --border-subtle: #e5e7eb;
+      --shadow-soft: 0 18px 45px rgba(15, 23, 42, 0.08);
+
+      --temp-color: #f97316;
+      --humid-color: #0ea5e9;
+      --press-color: #8b5cf6;
+      --air-color: #22c55e;
+      --rain-color: #ec4899;
+      --chip-bg: #f3f4f6;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: "Poppins", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: radial-gradient(circle at top left, #eff6ff 0, #ffffff 42%);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+    }
+
+    .app { width: 100%; max-width: 1200px; padding: 24px; }
+
+    /* Top bar */
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      gap: 16px;
+    }
+
+    .brand { display: flex; align-items: center; gap: 12px; }
+
+    .logo-circle {
+      width: 42px;
+      height: 42px;
+      border-radius: 999px;
+      background: conic-gradient(from 180deg, #0ea5e9, #22c55e, #f97316, #6366f1, #0ea5e9);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 12px 25px rgba(37, 99, 235, 0.25);
+    }
+
+    .logo-inner {
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      background: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+
+    .brand-text h1 {
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .brand-text span {
+      display: block;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(34, 197, 94, 0.08);
+      border: 1px solid rgba(34, 197, 94, 0.35);
+      font-size: 12px;
+      color: #16a34a;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #22c55e;
+      box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.25);
+    }
+
+    /* Main layout */
+    .layout {
+      display: grid;
+      grid-template-columns: 2fr 1.1fr;
+      gap: 20px;
+    }
+
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: 24px;
+      box-shadow: var(--shadow-soft);
+      border: 1px solid rgba(148, 163, 184, 0.15);
+      padding: 18px 20px 20px;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      gap: 10px;
+    }
+
+    .card-header h2 { font-size: 18px; font-weight: 600; }
+    .card-header span { font-size: 12px; color: var(--text-muted); }
+
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .chip {
+      font-size: 11px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: var(--chip-bg);
+      color: var(--text-muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid transparent;
+    }
+
+    .chip-icon { font-size: 13px; }
+
+    .sensor-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    @media (max-width: 640px) {
+      .sensor-grid { grid-template-columns: 1fr; }
+    }
+
+    .sensor-card {
+      border-radius: 18px;
+      border: 1px solid var(--border-subtle);
+      padding: 14px 14px 12px;
+      position: relative;
+      overflow: hidden;
+      background: #f9fafb;
+    }
+
+    .sensor-card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: 0.07;
+      pointer-events: none;
+    }
+
+    .sensor-card.temp::before    { background: linear-gradient(135deg, var(--temp-color), transparent); }
+    .sensor-card.humid::before   { background: linear-gradient(135deg, var(--humid-color), transparent); }
+    .sensor-card.pressure::before{ background: linear-gradient(135deg, var(--press-color), transparent); }
+    .sensor-card.air::before     { background: linear-gradient(135deg, var(--air-color), transparent); }
+    .sensor-card.rain::before    { background: linear-gradient(135deg, var(--rain-color), transparent); }
+
+    .sensor-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 4px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .sensor-title { font-size: 13px; font-weight: 500; }
+    .sensor-sub   { font-size: 11px; color: var(--text-muted); }
+
+    .sensor-icon {
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      background: #ffffffcc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
+    }
+
+    .sensor-main {
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+      margin-bottom: 4px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .sensor-value { font-size: 22px; font-weight: 600; }
+    .sensor-unit  { font-size: 11px; color: var(--text-muted); }
+
+    .sensor-status {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .sensor-status span { font-weight: 500; }
+
+    .sensor-meter {
+      width: 100%;
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(229, 231, 235, 0.9);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .sensor-meter-fill {
+      height: 100%;
+      border-radius: inherit;
+      width: 40%;
+      transform-origin: left;
+      transform: scaleX(0.5);
+      transition: transform 0.4s ease;
+    }
+
+    .sensor-card.temp    .sensor-meter-fill { background: linear-gradient(90deg, #fed7aa, #f97316); }
+    .sensor-card.humid   .sensor-meter-fill { background: linear-gradient(90deg, #bae6fd, #0ea5e9); }
+    .sensor-card.pressure.sensor-meter-fill { background: linear-gradient(90deg, #ddd6fe, #8b5cf6); }
+    .sensor-card.air     .sensor-meter-fill { background: linear-gradient(90deg, #bbf7d0, #22c55e); }
+    .sensor-card.rain    .sensor-meter-fill { background: linear-gradient(90deg, #fbcfe8, #ec4899); }
+
+    .side-card { display: flex; flex-direction: column; gap: 14px; }
+
+    .mini-stat {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 12px;
+      border-radius: 16px;
+      border: 1px dashed rgba(148, 163, 184, 0.6);
+      background: rgba(248, 250, 252, 0.9);
+      font-size: 12px;
+      gap: 10px;
+    }
+
+    .mini-stat strong { font-size: 14px; }
+
+    .legend-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 6px;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--text-muted);
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(248, 250, 252, 0.8);
+    }
+
+    .legend-dot { width: 9px; height: 9px; border-radius: 2px; }
+    .legend-temp  { background: var(--temp-color); }
+    .legend-humid { background: var(--humid-color); }
+    .legend-press { background: var(--press-color); }
+    .legend-air   { background: var(--air-color); }
+    .legend-rain  { background: var(--rain-color); }
+
+    .footer-note {
+      margin-top: 16px;
+      font-size: 11px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <header class="top-bar">
+      <div class="brand">
+        <div class="logo-circle">
+          <div class="logo-inner">☁️</div>
+        </div>
+        <div class="brand-text">
+          <h1>Smart Weather Station</h1>
+          <span>ESP32 • BMP180 • DHT11 • MQ135 • Rain Sensor</span>
+        </div>
+      </div>
+      <div class="status-pill">
+        <span class="status-dot"></span>
+        <span id="connection-status">Searching ESP32…</span>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2>Live Weather Dashboard</h2>
+            <span id="last-updated">Last updated: —</span>
+          </div>
+        </div>
+
+        <div class="chip-row">
+          <div class="chip"><span class="chip-icon">📡</span> Real-time IoT data</div>
+          <div class="chip"><span class="chip-icon">🧠</span> ESP32 controller</div>
+          <div class="chip"><span class="chip-icon">🌦</span> Indoor & outdoor sensing</div>
+        </div>
+
+        <div class="sensor-grid">
+          <!-- Temperature -->
+          <article class="sensor-card temp">
+            <div class="sensor-header">
+              <div>
+                <div class="sensor-title">Temperature</div>
+                <div class="sensor-sub">DHT11 / BMP180</div>
+              </div>
+              <div class="sensor-icon">🌡</div>
+            </div>
+            <div class="sensor-main">
+              <div class="sensor-value" id="temp-value">--</div>
+              <div class="sensor-unit">°C</div>
+            </div>
+            <div class="sensor-status">Status: <span id="temp-status">—</span></div>
+            <div class="sensor-meter">
+              <div class="sensor-meter-fill" id="temp-meter"></div>
+            </div>
+          </article>
+
+          <!-- Humidity -->
+          <article class="sensor-card humid">
+            <div class="sensor-header">
+              <div>
+                <div class="sensor-title">Humidity</div>
+                <div class="sensor-sub">DHT11</div>
+              </div>
+              <div class="sensor-icon">💧</div>
+            </div>
+            <div class="sensor-main">
+              <div class="sensor-value" id="humidity-value">--</div>
+              <div class="sensor-unit">%</div>
+            </div>
+            <div class="sensor-status">Status: <span id="humidity-status">—</span></div>
+            <div class="sensor-meter">
+              <div class="sensor-meter-fill" id="humidity-meter"></div>
+            </div>
+          </article>
+
+          <!-- Pressure -->
+          <article class="sensor-card pressure">
+            <div class="sensor-header">
+              <div>
+                <div class="sensor-title">Pressure</div>
+                <div class="sensor-sub">BMP180</div>
+              </div>
+              <div class="sensor-icon">🌍</div>
+            </div>
+            <div class="sensor-main">
+              <div class="sensor-value" id="pressure-value">--</div>
+              <div class="sensor-unit">hPa</div>
+            </div>
+            <div class="sensor-status">Status: <span id="pressure-status">—</span></div>
+            <div class="sensor-meter">
+              <div class="sensor-meter-fill" id="pressure-meter"></div>
+            </div>
+          </article>
+
+          <!-- Air Quality -->
+          <article class="sensor-card air">
+            <div class="sensor-header">
+              <div>
+                <div class="sensor-title">Air Quality</div>
+                <div class="sensor-sub">MQ135</div>
+              </div>
+              <div class="sensor-icon">🫧</div>
+            </div>
+            <div class="sensor-main">
+              <div class="sensor-value" id="air-value">--</div>
+              <div class="sensor-unit">AQI*</div>
+            </div>
+            <div class="sensor-status">Status: <span id="air-status">—</span></div>
+            <div class="sensor-meter">
+              <div class="sensor-meter-fill" id="air-meter"></div>
+            </div>
+          </article>
+
+          <!-- Rain -->
+          <article class="sensor-card rain">
+            <div class="sensor-header">
+              <div>
+                <div class="sensor-title">Rain Sensor</div>
+                <div class="sensor-sub">Analog / Digital</div>
+              </div>
+              <div class="sensor-icon">🌧</div>
+            </div>
+            <div class="sensor-main">
+              <div class="sensor-value" id="rain-value">--</div>
+              <div class="sensor-unit">state</div>
+            </div>
+            <div class="sensor-status">Status: <span id="rain-status">—</span></div>
+            <div class="sensor-meter">
+              <div class="sensor-meter-fill" id="rain-meter"></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <aside class="side-card">
+        <section class="card">
+          <div class="card-header">
+            <div>
+              <h2>Today’s Snapshot</h2>
+              <span id="snapshot-text">Environment overview</span>
+            </div>
+          </div>
+
+          <div class="mini-stat">
+            <div>
+              Overall mood<br />
+              <strong id="overall-mood">Calculating…</strong>
+            </div>
+            <div id="overall-emoji" style="font-size: 22px;">😶</div>
+          </div>
+
+          <div class="mini-stat">
+            <div>
+              ESP32 Status<br />
+              <strong id="esp-status">Checking…</strong>
+            </div>
+            <div style="font-size: 11px; text-align:right;">
+              IP: <span id="esp-ip">not set</span><br />
+              Last sync: <span id="sync-time">—</span>
+            </div>
+          </div>
+
+          <div>
+            <div style="font-size: 12px; font-weight: 500; margin-bottom: 4px;">
+              Sensor colour legend
+            </div>
+            <div class="legend-row">
+              <div class="legend-item">
+                <span class="legend-dot legend-temp"></span> Temperature
+              </div>
+              <div class="legend-item">
+                <span class="legend-dot legend-humid"></span> Humidity
+              </div>
+              <div class="legend-item">
+                <span class="legend-dot legend-press"></span> Pressure
+              </div>
+              <div class="legend-item">
+                <span class="legend-dot legend-air"></span> Air Quality
+              </div>
+              <div class="legend-item">
+                <span class="legend-dot legend-rain"></span> Rain
+              </div>
+            </div>
+          </div>
+        </section>
+      </aside>
+    </main>
+
+    <p class="footer-note">
+      *AQI value here is a relative indicator from MQ135. Calibrate in your ESP32 code for accurate units.
+    </p>
+  </div>
+
+  <script>
+    // ====== CONFIG: put your ESP32 IP here ======
+    const ESP32_IP = "http://192.168.0.100"; // example; change this
+    document.getElementById("esp-ip").textContent = ESP32_IP.replace("http://", "");
+
+    let demoMode = true;  // start in demo until first real data
+    let everConnected = false;
+
+    // ----------- Helpers -----------
+    function setText(id, text) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = text;
+    }
+
+    function setMeter(id, value01) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const clamped = Math.max(0, Math.min(1, value01));
+      el.style.transform = "scaleX(" + clamped + ")";
+    }
+
+    function formatTime(date) {
+      return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    }
+
+    // ----------- Update UI from data -----------
+    function updateDashboard(data) {
+      const now = new Date();
+      setText("last-updated", "Last updated: " + formatTime(now));
+      setText("sync-time", formatTime(now));
+
+      // Temperature
+      const t = data.temperatureC;
+      setText("temp-value", t.toFixed(1));
+      let tStatus;
+      if (t < 15) tStatus = "Cool";
+      else if (t <= 30) tStatus = "Comfortable";
+      else tStatus = "Hot";
+      setText("temp-status", tStatus);
+      setMeter("temp-meter", (t - 0) / 50);
+
+      // Humidity
+      const h = data.humidity;
+      setText("humidity-value", h.toFixed(0));
+      let hStatus;
+      if (h < 30) hStatus = "Dry";
+      else if (h <= 60) hStatus = "Comfort";
+      else hStatus = "Humid";
+      setText("humidity-status", hStatus);
+      setMeter("humidity-meter", h / 100);
+
+      // Pressure
+      const p = data.pressurehPa;
+      setText("pressure-value", p.toFixed(1));
+      let pStatus = "Normal";
+      if (p < 1000) pStatus = "Low pressure";
+      else if (p > 1020) pStatus = "High pressure";
+      setText("pressure-status", pStatus);
+      setMeter("pressure-meter", (p - 980) / 60);
+
+      // Air quality
+      const air = data.airQualityIndex;
+      setText("air-value", air.toFixed(0));
+      let aStatus;
+      if (air <= 50) aStatus = "Good";
+      else if (air <= 100) aStatus = "Moderate";
+      else if (air <= 150) aStatus = "Unhealthy (sensitive)";
+      else aStatus = "Unhealthy";
+      setText("air-status", aStatus);
+      setMeter("air-meter", air / 300);
+
+      // Rain
+      const rain = data.rain || {};
+      const raining = !!rain.isRaining;
+      setText("rain-value", raining ? "Raining" : "No rain");
+      setText("rain-status", rain.description || (raining ? "Carry an umbrella" : "Sky looks clear"));
+      setMeter("rain-meter", raining ? 0.9 : 0.1);
+
+      // Overall mood
+      const moodScore = (
+        (tStatus === "Comfortable" ? 1 : 0.4) +
+        (hStatus === "Comfort" ? 1 : 0.4) +
+        (aStatus === "Good" ? 1 : 0.6)
+      ) / 3;
+
+      let moodText = "Balanced";
+      let emoji = "🙂";
+      if (moodScore > 0.8) { moodText = "Very pleasant"; emoji = "😄"; }
+      else if (moodScore < 0.5) { moodText = "Not comfortable"; emoji = "😓"; }
+
+      setText("overall-mood", moodText);
+      document.getElementById("overall-emoji").textContent = emoji;
+
+      setText(
+        "snapshot-text",
+        `Feels ${tStatus.toLowerCase()}, air is ${aStatus.toLowerCase()}, ` +
+        (raining ? "it’s currently raining." : "no rain detected.")
+      );
+    }
+
+    // ----------- Demo data (used only if ESP32 not found) -----------
+    function randomData() {
+      return {
+        temperatureC: 20 + Math.random() * 10,
+        humidity: 40 + Math.random() * 30,
+        pressurehPa: 995 + Math.random() * 25,
+        airQualityIndex: 30 + Math.random() * 120,
+        rain: {
+          isRaining: Math.random() > 0.7,
+          description: ""
+        }
+      };
+    }
+
+    // ----------- NEW: Fetch from ESP32 -----------
+    async function fetchFromEsp32() {
+      try {
+        const res = await fetch(ESP32_IP + "/data", { cache: "no-cache" });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const json = await res.json();
+
+        everConnected = true;
+        demoMode = false;
+
+        setText("connection-status", "ESP32 Connected");
+        setText("esp-status", "Online");
+        updateDashboard(json);
+      } catch (err) {
+        console.error("ESP32 error:", err);
+
+        if (!everConnected) {
+          // before first successful connection, show demo
+          demoMode = true;
+          setText("connection-status", "ESP32 Offline (demo data)");
+          setText("esp-status", "Offline");
+        } else {
+          // after once connected, show last real values (no change to UI)
+          setText("connection-status", "ESP32 Lost (holding last data)");
+          setText("esp-status", "Disconnected");
+        }
+      }
+    }
+
+    // Initial: some data so it's not empty
+    updateDashboard(randomData());
+
+    // Timer: try ESP32 every 3s, and demo heartbeat every 5s if never connected
+    setInterval(fetchFromEsp32, 3000);
+    setInterval(() => {
+      if (demoMode && !everConnected) {
+        updateDashboard(randomData());
+      }
+    }, 5000);
+  </script>
+</body>
+</html>
